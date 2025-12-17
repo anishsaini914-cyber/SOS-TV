@@ -1,13 +1,22 @@
 {
   "name": "SOS Game Offline",
   "short_name": "SOS",
-  "start_url": "./index.html",
+  "start_url": "/SOS-TV/index.html",
+  "scope": "/SOS-TV/",
   "display": "standalone",
   "background_color": "#0a0a0b",
   "theme_color": "#8b5cf6",
   "orientation": "any",
   "icons": [
-    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+    {
+      "src": "/SOS-TV/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/SOS-TV/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
   ]
 }
