@@ -1,7 +1,7 @@
 {
   "name": "SOS Game Offline",
   "short_name": "SOS",
-  "start_url": "/index.html",
+  "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#0a0a0b",
   "theme_color": "#8b5cf6",
