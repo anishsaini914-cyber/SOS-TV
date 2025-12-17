@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SOS Game Offline</title>
+
+<style>
+body{
+  margin:0;
+  background:#0a0a0b;
+  color:#fff;
+  font-family:Arial, sans-serif;
+  text-align:center;
+}
+.screen{display:none;padding:15px}
+.screen.active{display:block}
+
+button{
+  padding:10px 18px;
+  font-size:16px;
+  border:none;
+  border-radius:8px;
+  background:#8b5cf6;
+  color:#fff;
+  margin:6px;
+}
+
+#board{
+  display:grid;
+  gap:4px;
+  margin:15px auto;
+  max-width:94vw;
+}
+
+.cell{
+  background:#1f1f23;
+  aspect-ratio:1/1;
+  font-size:20px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:6px;
+}
+
+.cell.focus{
+  outline:4px solid #22c55e;
+  transform:scale(1.05);
+}
+
+.cell.p-sos{background:#2563eb}
+.cell.b-sos{background:#dc2626}
+
+#hud{
+  display:flex;
+  justify-content:space-around;
+  margin-top:8px;
+}
+</style>
+</head>
+
+<body>
+
+<!-- MAIN MENU -->
+<div id="menu" class="screen active">
+  <h1>SOS GAME</h1>
+
+  <p>Select Board Size</p>
+  <button onclick="startGame(10)">10 × 10</button>
+  <button onclick="startGame(20)">20 × 20</button>
+
+  <p>Bot Difficulty</p>
+  <button onclick="botLevel='EASY'">EASY</button>
+  <button onclick="botLevel='MEDIUM'">MEDIUM</button>
+  <button onclick="botLevel='HARD'">HARD</button>
+
+  <p>
+    <button onclick="toggleSound()">Sound: <span id="snd">ON</span></button>
+    <button onclick="show('about')">ABOUT US</button>
+  </p>
+</div>
+
+<!-- ABOUT -->
+<div id="about" class="screen">
+  <h2>About</h2>
+  <p>
+    Classic SOS board game<br>
+    Works Offline on Android TV & Mobile<br><br>
+    <strong>Proudly Developed by</strong><br>
+    <strong>Anish Saini</strong>
+  </p>
+  <button onclick="show('menu')">BACK</button>
+</div>
+
+<!-- GAME -->
+<div id="game" class="screen">
+  <h3>Turn: <span id="turn">PLAYER</span></h3>
+
+  <div id="hud">
+    <div>Player: <span id="ps">0</span></div>
+    <div>Bot: <span id="bs">0</span></div>
+  </div>
+
+  <div id="board"></div>
+
+  <div>
+    <button onclick="setLetter('S')">S</button>
+    <button onclick="setLetter('O')">O</button>
+    <button onclick="pause()">PAUSE</button>
+  </div>
+</div>
+
+<!-- PAUSE -->
+<div id="pause" class="screen">
+  <h2>PAUSED</h2>
+  <button onclick="resume()">RESUME</button>
+  <button onclick="show('menu')">MENU</button>
+</div>
+
+<!-- GAME OVER -->
+<div id="over" class="screen">
+  <h2>GAME OVER</h2>
+  <p id="result"></p>
+  <button onclick="show('menu')">MENU</button>
+</div>
+
+<script>
+/* ================= SOUND SYSTEM ================= */
+let soundOn = true;
+let audioCtx = null;
+
+function beep(freq, duration){
+  if(!soundOn) return;
+  if(!audioCtx){
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.frequency.value = freq;
+  osc.type = "sine";
+  gain.gain.value = 0.1;
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start();
+  osc.stop(audioCtx.currentTime + duration);
+}
+
+function moveSound(){ beep(500, 0.08); }
+function sosSound(){ beep(900, 0.25); }
+
+function toggleSound(){
+  soundOn = !soundOn;
+  document.getElementById("snd").textContent = soundOn ? "ON" : "OFF";
+}
+
+/* ================= GAME LOGIC ================= */
+let SIZE=10;
+let board=[], owner=[];
+let focus=0;
+let turn="PLAYER";
+let letter="S";
+let ps=0, bs=0;
+let botLevel="EASY";
+
+const screens=["menu","game","pause","over","about"];
+function show(id){
+  screens.forEach(s=>document.getElementById(s).classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+}
+
+function startGame(n){
+  SIZE=n;
+  board=Array(n*n).fill("");
+  owner=Array(n*n).fill("");
+  ps=bs=0;
+  focus=0;
+  turn="PLAYER";
+  draw(); update();
+  show("game");
+}
+
+function draw(){
+  const b=document.getElementById("board");
+  b.style.gridTemplateColumns=`repeat(${SIZE},1fr)`;
+  b.innerHTML="";
+  board.forEach((v,i)=>{
+    const d=document.createElement("div");
+    d.className="cell"+
+      (i===focus?" focus":"")+
+      (owner[i]==="P"?" p-sos":owner[i]==="B"?" b-sos":"");
+    d.textContent=v;
+    d.onclick=()=>place(i);
+    b.appendChild(d);
+  });
+}
+
+function isBoardFull(){
+  return board.every(c=>c!=="");
+}
+
+/* PLAYER MOVE */
+function place(i){
+  if(board[i]||turn!=="PLAYER")return;
+
+  board[i]=letter;
+  moveSound();
+  const scored=checkSOS(i,"PLAYER");
+
+  if(isBoardFull()){
+    update(); draw();
+    return end();
+  }
+
+  if(!scored) turn="BOT";
+  update(); draw();
+
+  if(turn==="BOT") setTimeout(botMove,350);
+}
+
+/* BOT MOVE */
+function botMove(){
+  const empty=board.map((v,i)=>v===""?i:null).filter(v=>v!==null);
+  if(!empty.length) return end();
+
+  let move=empty[Math.floor(Math.random()*empty.length)];
+  board[move]=Math.random()>.5?"S":"O";
+  moveSound();
+
+  const scored=checkSOS(move,"BOT");
+
+  if(isBoardFull()){
+    update(); draw();
+    return end();
+  }
+
+  if(!scored) turn="PLAYER";
+  update(); draw();
+
+  if(turn==="BOT") setTimeout(botMove,350);
+}
+
+/* SOS CHECK */
+function checkSOS(i,who){
+  const x=i%SIZE,y=Math.floor(i/SIZE);
+  const dirs=[[1,0],[0,1],[1,1],[1,-1]];
+  let scored=false;
+
+  dirs.forEach(d=>{
+    if(get(x-d[0],y-d[1])==="S" && board[i]==="O" && get(x+d[0],y+d[1])==="S"){
+      mark(x-d[0],y-d[1],who);mark(x,y,who);mark(x+d[0],y+d[1],who);scored=true;
+    }
+    if(board[i]==="S" && get(x+d[0],y+d[1])==="O" && get(x+2*d[0],y+2*d[1])==="S"){
+      mark(x,y,who);mark(x+d[0],y+d[1],who);mark(x+2*d[0],y+2*d[1],who);scored=true;
+    }
+    if(board[i]==="S" && get(x-d[0],y-d[1])==="O" && get(x-2*d[0],y-2*d[1])==="S"){
+      mark(x,y,who);mark(x-d[0],y-d[1],who);mark(x-2*d[0],y-2*d[1],who);scored=true;
+    }
+  });
+
+  if(scored){
+    sosSound();
+    who==="PLAYER"?ps++:bs++;
+  }
+  return scored;
+}
+
+function mark(x,y,w){ owner[y*SIZE+x]=w==="PLAYER"?"P":"B"; }
+function get(x,y){ if(x<0||y<0||x>=SIZE||y>=SIZE)return""; return board[y*SIZE+x]; }
+
+function update(){
+  document.getElementById("ps").textContent=ps;
+  document.getElementById("bs").textContent=bs;
+  document.getElementById("turn").textContent=turn;
+}
+
+function setLetter(l){letter=l}
+function pause(){show("pause")}
+function resume(){show("game")}
+
+function end(){
+  show("over");
+  document.getElementById("result").textContent =
+    ps>bs ? "🎉 YOU WIN!" : "🤖 BOT WINS!";
+}
+
+/* ANDROID TV REMOTE */
+document.addEventListener("keydown",e=>{
+  if(!document.getElementById("game").classList.contains("active"))return;
+
+  if(e.key==="ArrowRight")focus=(focus+1)%(SIZE*SIZE);
+  if(e.key==="ArrowLeft")focus=(focus-1+SIZE*SIZE)%(SIZE*SIZE);
+  if(e.key==="ArrowDown")focus=(focus+SIZE)%(SIZE*SIZE);
+  if(e.key==="ArrowUp")focus=(focus-SIZE+SIZE*SIZE)%(SIZE*SIZE);
+  if(e.key==="Enter"||e.key==="OK")place(focus);
+
+  draw();
+});
+</script>
+
+</body>
+</html>
